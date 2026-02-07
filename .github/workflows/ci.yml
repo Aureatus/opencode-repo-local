@@ -45,6 +45,8 @@ jobs:
     name: E2E
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      OPENCODE_VERSION: "1.1.53"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,11 +72,21 @@ jobs:
             ~/.cache/opencode
           key: opencode-cache-${{ runner.os }}-v1
 
+      - name: Cache OpenCode CLI binary
+        id: cache-opencode-cli
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/opencode
+          key: opencode-cli-${{ runner.os }}-${{ env.OPENCODE_VERSION }}
+          restore-keys: |
+            opencode-cli-${{ runner.os }}-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Install OpenCode CLI
-        run: curl -fsSL https://opencode.ai/install | bash
+        if: steps.cache-opencode-cli.outputs.cache-hit != 'true'
+        run: curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION"
 
       - name: Add OpenCode to PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
