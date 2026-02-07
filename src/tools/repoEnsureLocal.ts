@@ -17,7 +17,7 @@ import {
   pullFfOnlyForBranch
 } from "../lib/git";
 import { buildRepoPath, resolveCloneRoot } from "../lib/paths";
-import type { RepoEnsureResult, UpdateMode } from "../lib/types";
+import type { RepoEnsureLocalArgs, RepoEnsureResult, UpdateMode } from "../lib/types";
 import { parseRepoUrl } from "../lib/url";
 
 const UPDATE_MODES: ReadonlySet<string> = new Set(["ff-only", "fetch-only", "reset-clean"]);
@@ -57,121 +57,125 @@ function toResultText(result: RepoEnsureResult): string {
   return JSON.stringify(result, null, 2);
 }
 
+function assertKnownArgs(args: RepoEnsureLocalArgs): void {
+  const extraKeys = Object.keys(args ?? {}).filter((key) => !ALLOWED_KEYS.has(key));
+  if (extraKeys.length > 0) {
+    throw new RepoPluginError("INVALID_ARGS", `Unknown arguments: ${extraKeys.join(", ")}`);
+  }
+}
+
+export async function repoEnsureLocal(args: RepoEnsureLocalArgs): Promise<RepoEnsureResult> {
+  assertKnownArgs(args);
+
+  const repoInput = args.repo?.trim();
+  if (!repoInput) {
+    throw new RepoPluginError("INVALID_URL", "repo argument cannot be empty");
+  }
+
+  const ref = args.ref?.trim() || undefined;
+  const mode = normalizeUpdateMode(args.update_mode);
+  const allowSsh = args.allow_ssh ?? process.env.OPENCODE_REPO_ALLOW_SSH === "true";
+  const parsedRepo = parseRepoUrl(repoInput, allowSsh);
+
+  await ensureGitAvailable();
+
+  const cloneRoot = await resolveCloneRoot(args.clone_root);
+  const localPath = buildRepoPath(cloneRoot, parsedRepo);
+  const actions: string[] = [];
+
+  let status: RepoEnsureResult["status"];
+  if (!(await directoryExists(localPath))) {
+    await cloneRepo(parsedRepo.raw, localPath, args.depth);
+    actions.push("cloned_repository");
+
+    if (ref) {
+      await checkoutRef(localPath, ref);
+      actions.push(`checked_out_${ref}`);
+    }
+
+    status = "cloned";
+  } else {
+    if (!(await isGitRepository(localPath))) {
+      throw new RepoPluginError("NOT_GIT_REPO", `Target path exists but is not a git repository: ${localPath}`);
+    }
+
+    const originUrl = await getOriginUrl(localPath);
+    const existingOrigin = parseRepoUrl(originUrl, true);
+    if (existingOrigin.key !== parsedRepo.key) {
+      throw new RepoPluginError(
+        "REPO_URL_MISMATCH",
+        "Existing clone origin does not match requested repository",
+        `requested=${parsedRepo.canonicalUrl}\nexisting=${existingOrigin.canonicalUrl}`
+      );
+    }
+
+    const beforeSha = await getHeadSha(localPath);
+
+    await fetchOrigin(localPath);
+    actions.push("fetched_origin");
+
+    if (ref) {
+      await checkoutRef(localPath, ref);
+      actions.push(`checked_out_${ref}`);
+    }
+
+    if (mode === "ff-only") {
+      if (await isWorktreeDirty(localPath)) {
+        throw new RepoPluginError(
+          "DIRTY_WORKTREE",
+          "Cannot fast-forward because working tree has local changes",
+          "Commit/stash changes or use update_mode=fetch-only"
+        );
+      }
+
+      const currentRef = await getCurrentRef(localPath);
+      if (currentRef !== "HEAD") {
+        await pullFfOnlyForBranch(localPath, currentRef);
+        actions.push(`fast_forwarded_${currentRef}`);
+      } else {
+        actions.push("detached_head_no_pull");
+      }
+    }
+
+    if (mode === "reset-clean") {
+      const currentRef = await getCurrentRef(localPath);
+      if (currentRef === "HEAD") {
+        throw new RepoPluginError("DETACHED_HEAD", "Cannot use reset-clean while repository is in detached HEAD state");
+      }
+
+      await hardResetToOriginBranch(localPath, currentRef);
+      actions.push(`reset_clean_${currentRef}`);
+    }
+
+    const afterSha = await getHeadSha(localPath);
+    if (mode === "fetch-only") {
+      status = "fetched";
+    } else {
+      status = beforeSha === afterSha ? "already-current" : "updated";
+    }
+  }
+
+  return {
+    status,
+    repo_url: parsedRepo.canonicalUrl,
+    local_path: localPath,
+    current_ref: await getCurrentRef(localPath),
+    default_branch: await getDefaultBranch(localPath),
+    head_sha: await getHeadSha(localPath),
+    actions,
+    instructions: [
+      `Use built-in tools with local_path: ${localPath}`,
+      `Example: run Grep/Read/Glob with files under ${localPath}`
+    ]
+  };
+}
+
 export const repoEnsureLocalTool = tool({
   description: "Clone or update a repository locally and return its absolute path for OpenCode built-in tools.",
   args: REPO_TOOL_ARGS,
   async execute(args) {
     try {
-      const extraKeys = Object.keys(args ?? {}).filter((key) => !ALLOWED_KEYS.has(key));
-      if (extraKeys.length > 0) {
-        throw new RepoPluginError("INVALID_ARGS", `Unknown arguments: ${extraKeys.join(", ")}`);
-      }
-
-      const repoInput = args.repo?.trim();
-      if (!repoInput) {
-        throw new RepoPluginError("INVALID_URL", "repo argument cannot be empty");
-      }
-
-      const ref = args.ref?.trim() || undefined;
-      const mode = normalizeUpdateMode(args.update_mode);
-      const allowSsh = args.allow_ssh ?? process.env.OPENCODE_REPO_ALLOW_SSH === "true";
-      const parsedRepo = parseRepoUrl(repoInput, allowSsh);
-
-      await ensureGitAvailable();
-
-      const cloneRoot = await resolveCloneRoot(args.clone_root);
-      const localPath = buildRepoPath(cloneRoot, parsedRepo);
-      const actions: string[] = [];
-
-      let status: RepoEnsureResult["status"];
-      if (!(await directoryExists(localPath))) {
-        await cloneRepo(parsedRepo.raw, localPath, args.depth);
-        actions.push("cloned_repository");
-
-        if (ref) {
-          await checkoutRef(localPath, ref);
-          actions.push(`checked_out_${ref}`);
-        }
-
-        status = "cloned";
-      } else {
-        if (!(await isGitRepository(localPath))) {
-          throw new RepoPluginError("NOT_GIT_REPO", `Target path exists but is not a git repository: ${localPath}`);
-        }
-
-        const originUrl = await getOriginUrl(localPath);
-        const existingOrigin = parseRepoUrl(originUrl, true);
-        if (existingOrigin.key !== parsedRepo.key) {
-          throw new RepoPluginError(
-            "REPO_URL_MISMATCH",
-            "Existing clone origin does not match requested repository",
-            `requested=${parsedRepo.canonicalUrl}\nexisting=${existingOrigin.canonicalUrl}`
-          );
-        }
-
-        const beforeSha = await getHeadSha(localPath);
-
-        await fetchOrigin(localPath);
-        actions.push("fetched_origin");
-
-        if (ref) {
-          await checkoutRef(localPath, ref);
-          actions.push(`checked_out_${ref}`);
-        }
-
-        if (mode === "ff-only") {
-          if (await isWorktreeDirty(localPath)) {
-            throw new RepoPluginError(
-              "DIRTY_WORKTREE",
-              "Cannot fast-forward because working tree has local changes",
-              "Commit/stash changes or use update_mode=fetch-only"
-            );
-          }
-
-          const currentRef = await getCurrentRef(localPath);
-          if (currentRef !== "HEAD") {
-            await pullFfOnlyForBranch(localPath, currentRef);
-            actions.push(`fast_forwarded_${currentRef}`);
-          } else {
-            actions.push("detached_head_no_pull");
-          }
-        }
-
-        if (mode === "reset-clean") {
-          const currentRef = await getCurrentRef(localPath);
-          if (currentRef === "HEAD") {
-            throw new RepoPluginError(
-              "DETACHED_HEAD",
-              "Cannot use reset-clean while repository is in detached HEAD state"
-            );
-          }
-
-          await hardResetToOriginBranch(localPath, currentRef);
-          actions.push(`reset_clean_${currentRef}`);
-        }
-
-        const afterSha = await getHeadSha(localPath);
-        if (mode === "fetch-only") {
-          status = "fetched";
-        } else {
-          status = beforeSha === afterSha ? "already-current" : "updated";
-        }
-      }
-
-      const result: RepoEnsureResult = {
-        status,
-        repo_url: parsedRepo.canonicalUrl,
-        local_path: localPath,
-        current_ref: await getCurrentRef(localPath),
-        default_branch: await getDefaultBranch(localPath),
-        head_sha: await getHeadSha(localPath),
-        actions,
-        instructions: [
-          `Use built-in tools with local_path: ${localPath}`,
-          `Example: run Grep/Read/Glob with files under ${localPath}`
-        ]
-      };
-
+      const result = await repoEnsureLocal(args as RepoEnsureLocalArgs);
       return toResultText(result);
     } catch (error) {
       formatFailure(error);

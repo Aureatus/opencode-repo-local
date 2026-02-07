@@ -73,5 +73,13 @@ Output fields:
 bun install
 bun run typecheck
 bun run test
+bun run test:integration
 bun run build
 ```
+
+Integration script notes:
+
+- Default repo: `https://github.com/anomalyco/opencode.git`
+- Override repo: `bun run test:integration -- https://github.com/OWNER/REPO.git`
+- Keep clone directory for inspection: `OPENCODE_REPO_INTEGRATION_KEEP=true bun run test:integration`
+- Set custom clone root: `OPENCODE_REPO_INTEGRATION_ROOT=/abs/path bun run test:integration`

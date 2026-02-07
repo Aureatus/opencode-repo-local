@@ -21,9 +21,10 @@
   ],
   "scripts": {
     "dev": "bunx tsdown --watch",
-    "build": "tsdown",
+    "build": "bunx tsdown",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:integration": "bun run scripts/integration-test.ts",
     "prepack": "bun run build"
   },
   "keywords": [
