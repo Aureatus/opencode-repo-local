@@ -18,6 +18,7 @@ This package publishes to npm from git tags using `.github/workflows/release.yml
 - Configure npm Trusted Publishing for this package/repository pair.
 - The release workflow uses GitHub OIDC (`id-token: write`) and publishes with provenance.
 - If Trusted Publishing is not configured yet, the publish job will fail at `npm publish`.
+- Add repository secret `NPM_TOKEN` (automation token with package write access) as CI publish auth fallback.
 
 ## Release commands
 
