@@ -2,6 +2,7 @@ import { RepoPluginError } from "./errors";
 import type { ParsedRepoUrl } from "./types";
 
 const SSH_PATTERN = /^git@([^:/]+):(.+)$/;
+const GIT_SUFFIX_PATTERN = /\.git$/i;
 
 function splitPathSegments(input: string): string[] {
   const trimmed = input.trim().replace(/^\/+|\/+$/g, "");
@@ -15,18 +16,24 @@ function splitPathSegments(input: string): string[] {
   }
 
   const lastIndex = segments.length - 1;
-  segments[lastIndex] = segments[lastIndex].replace(/\.git$/i, "");
+  segments[lastIndex] = segments[lastIndex].replace(GIT_SUFFIX_PATTERN, "");
   return segments;
 }
 
 function validateSegments(segments: string[]): void {
   if (segments.length < 2) {
-    throw new RepoPluginError("INVALID_URL", "Repository URL must include owner and repository name");
+    throw new RepoPluginError(
+      "INVALID_URL",
+      "Repository URL must include owner and repository name"
+    );
   }
 
   for (const segment of segments) {
     if (!segment || segment === "." || segment === "..") {
-      throw new RepoPluginError("INVALID_URL", "Repository URL contains an invalid path segment");
+      throw new RepoPluginError(
+        "INVALID_URL",
+        "Repository URL contains an invalid path segment"
+      );
     }
   }
 }
@@ -35,10 +42,15 @@ function makeRepoKey(host: string, segments: string[]): string {
   return `${host.toLowerCase()}/${segments.join("/").toLowerCase()}`;
 }
 
-function buildParsed(raw: string, host: string, segments: string, protocol: "https" | "ssh"): ParsedRepoUrl;
-function buildParsed(raw: string, host: string, segments: string[], protocol: "https" | "ssh"): ParsedRepoUrl;
-function buildParsed(raw: string, host: string, segmentsInput: string | string[], protocol: "https" | "ssh"): ParsedRepoUrl {
-  const segments = Array.isArray(segmentsInput) ? segmentsInput : splitPathSegments(segmentsInput);
+function buildParsed(
+  raw: string,
+  host: string,
+  segmentsInput: string[] | string,
+  protocol: "https" | "ssh"
+): ParsedRepoUrl {
+  const segments = Array.isArray(segmentsInput)
+    ? segmentsInput
+    : splitPathSegments(segmentsInput);
   validateSegments(segments);
 
   const normalizedHost = host.toLowerCase();
@@ -53,7 +65,7 @@ function buildParsed(raw: string, host: string, segmentsInput: string | string[]
     host: normalizedHost,
     pathSegments: segments,
     canonicalUrl,
-    key: makeRepoKey(normalizedHost, segments)
+    key: makeRepoKey(normalizedHost, segments),
   };
 }
 
@@ -65,7 +77,12 @@ export function parseRepoUrl(repo: string, allowSsh: boolean): ParsedRepoUrl {
 
   if (raw.startsWith("https://")) {
     const url = new URL(raw);
-    return buildParsed(raw, url.hostname, splitPathSegments(url.pathname), "https");
+    return buildParsed(
+      raw,
+      url.hostname,
+      splitPathSegments(url.pathname),
+      "https"
+    );
   }
 
   if (allowSsh) {

@@ -1,6 +1,10 @@
 export type UpdateMode = "ff-only" | "fetch-only" | "reset-clean";
 
-export type RepoEnsureStatus = "cloned" | "updated" | "already-current" | "fetched";
+export type RepoEnsureStatus =
+  | "cloned"
+  | "updated"
+  | "already-current"
+  | "fetched";
 
 export interface RepoEnsureLocalArgs {
   repo: string;

@@ -8,5 +8,5 @@ export default defineConfig({
   clean: true,
   platform: "node",
   target: "node20",
-  external: ["@opencode-ai/plugin"]
+  external: ["@opencode-ai/plugin"],
 });

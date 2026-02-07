@@ -71,7 +71,10 @@ Output fields:
 
 ```bash
 bun install
+bun run fix
 bun run check
+bun run check:no-ignores
+bun run lint
 bun run typecheck
 bun run test
 bun run test:integration
@@ -89,7 +92,10 @@ Integration script notes:
 
 - This repo uses Husky for pre-commit and pre-push hooks.
 - Full local check command: `bun run check` (runs `check:core` and `test:integration` in parallel).
-- Core check command: `bun run check:core` (runs `typecheck`, `test`, and `build`).
+- Core check command: `bun run check:core` (runs `check:no-ignores`, `lint`, `typecheck`, `test`, and `build`).
+- Ignore-guard command: `bun run check:no-ignores` (fails on `biome-ignore` and TS ignore directives).
+- Lint command: `bun run lint` (Ultracite/Biome).
+- Fix command: `bun run fix` (Ultracite auto-fix).
 - Pre-commit command: `bun run check`.
 - Pre-push command: `bun run check`.
 - Hooks are installed by running `bun install` via the `prepare` script.

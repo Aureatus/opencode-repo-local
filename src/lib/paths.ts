@@ -20,9 +20,15 @@ function expandHome(input: string): string {
 }
 
 function sanitizeSegment(segment: string): string {
-  const sanitized = segment.replace(/[^A-Za-z0-9._-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  const sanitized = segment
+    .replace(/[^A-Za-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
   if (!sanitized) {
-    throw new RepoPluginError("INVALID_URL", `Could not derive a safe path segment from: ${segment}`);
+    throw new RepoPluginError(
+      "INVALID_URL",
+      `Could not derive a safe path segment from: ${segment}`
+    );
   }
   return sanitized;
 }
@@ -30,10 +36,15 @@ function sanitizeSegment(segment: string): string {
 function ensureWithinRoot(root: string, target: string): void {
   const resolvedRoot = path.resolve(root);
   const resolvedTarget = path.resolve(target);
-  const prefix = resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`;
+  const prefix = resolvedRoot.endsWith(path.sep)
+    ? resolvedRoot
+    : `${resolvedRoot}${path.sep}`;
 
   if (resolvedTarget !== resolvedRoot && !resolvedTarget.startsWith(prefix)) {
-    throw new RepoPluginError("PATH_VIOLATION", "Resolved repository path escaped clone root");
+    throw new RepoPluginError(
+      "PATH_VIOLATION",
+      "Resolved repository path escaped clone root"
+    );
   }
 }
 
@@ -43,7 +54,10 @@ export async function resolveCloneRoot(override?: string): Promise<string> {
   const expanded = expandHome(selected);
 
   if (override?.trim() && !path.isAbsolute(expanded)) {
-    throw new RepoPluginError("INVALID_CLONE_ROOT", "clone_root must be an absolute path");
+    throw new RepoPluginError(
+      "INVALID_CLONE_ROOT",
+      "clone_root must be an absolute path"
+    );
   }
 
   const root = path.resolve(expanded);

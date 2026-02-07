@@ -4,27 +4,30 @@ import path from "node:path";
 
 import { RepoPluginError } from "./errors";
 
-type RunGitOptions = {
+interface RunGitOptions {
   cwd?: string;
   timeoutMs?: number;
-};
+}
 
-type RunGitResult = {
+interface RunGitResult {
   stdout: string;
   stderr: string;
   exitCode: number;
-};
+}
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
-async function runGitRaw(args: string[], options: RunGitOptions = {}): Promise<RunGitResult> {
+function runGitRaw(
+  args: string[],
+  options: RunGitOptions = {}
+): Promise<RunGitResult> {
   const cwd = options.cwd;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return new Promise((resolve, reject) => {
     const processRef = spawn("git", args, {
       cwd,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     let stdout = "";
@@ -51,11 +54,19 @@ async function runGitRaw(args: string[], options: RunGitOptions = {}): Promise<R
       }
 
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        reject(new RepoPluginError("GIT_NOT_FOUND", "git binary not found on PATH"));
+        reject(
+          new RepoPluginError("GIT_NOT_FOUND", "git binary not found on PATH")
+        );
         return;
       }
 
-      reject(new RepoPluginError("GIT_FAILURE", "Failed to start git command", String(error)));
+      reject(
+        new RepoPluginError(
+          "GIT_FAILURE",
+          "Failed to start git command",
+          String(error)
+        )
+      );
     });
 
     processRef.on("close", (exitCode) => {
@@ -66,16 +77,21 @@ async function runGitRaw(args: string[], options: RunGitOptions = {}): Promise<R
       resolve({
         stdout: stdout.trim(),
         stderr: stderr.trim(),
-        exitCode: exitCode ?? 1
+        exitCode: exitCode ?? 1,
       });
     });
   });
 }
 
-async function runGit(args: string[], options: RunGitOptions = {}): Promise<string> {
+async function runGit(
+  args: string[],
+  options: RunGitOptions = {}
+): Promise<string> {
   const result = await runGitRaw(args, options);
   if (result.exitCode !== 0) {
-    const details = [`git ${args.join(" ")}`, result.stderr || result.stdout].filter(Boolean).join("\n");
+    const details = [`git ${args.join(" ")}`, result.stderr || result.stdout]
+      .filter(Boolean)
+      .join("\n");
     throw new RepoPluginError("GIT_FAILURE", "git command failed", details);
   }
   return result.stdout;
@@ -95,11 +111,17 @@ export async function directoryExists(target: string): Promise<boolean> {
 }
 
 export async function isGitRepository(cwd: string): Promise<boolean> {
-  const result = await runGitRaw(["rev-parse", "--is-inside-work-tree"], { cwd });
+  const result = await runGitRaw(["rev-parse", "--is-inside-work-tree"], {
+    cwd,
+  });
   return result.exitCode === 0 && result.stdout === "true";
 }
 
-export async function cloneRepo(repoUrl: string, targetPath: string, depth?: number): Promise<void> {
+export async function cloneRepo(
+  repoUrl: string,
+  targetPath: string,
+  depth?: number
+): Promise<void> {
   await mkdir(path.dirname(targetPath), { recursive: true });
   const args = ["clone", "--origin", "origin"];
   if (depth !== undefined) {
@@ -117,34 +139,45 @@ export async function checkoutRef(cwd: string, ref: string): Promise<void> {
   await runGit(["checkout", ref], { cwd });
 }
 
-export async function pullFfOnlyForBranch(cwd: string, branch: string): Promise<void> {
+export async function pullFfOnlyForBranch(
+  cwd: string,
+  branch: string
+): Promise<void> {
   await runGit(["pull", "--ff-only", "--prune", "origin", branch], { cwd });
 }
 
-export async function hardResetToOriginBranch(cwd: string, branch: string): Promise<void> {
+export async function hardResetToOriginBranch(
+  cwd: string,
+  branch: string
+): Promise<void> {
   await runGit(["reset", "--hard", `origin/${branch}`], { cwd });
   await runGit(["clean", "-fd"], { cwd });
 }
 
-export async function getHeadSha(cwd: string): Promise<string> {
+export function getHeadSha(cwd: string): Promise<string> {
   return runGit(["rev-parse", "HEAD"], { cwd });
 }
 
-export async function getCurrentRef(cwd: string): Promise<string> {
+export function getCurrentRef(cwd: string): Promise<string> {
   return runGit(["rev-parse", "--abbrev-ref", "HEAD"], { cwd });
 }
 
 export async function getDefaultBranch(cwd: string): Promise<string | null> {
-  const result = await runGitRaw(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], { cwd });
+  const result = await runGitRaw(
+    ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    { cwd }
+  );
   if (result.exitCode !== 0 || !result.stdout) {
     return null;
   }
 
   const prefix = "origin/";
-  return result.stdout.startsWith(prefix) ? result.stdout.slice(prefix.length) : result.stdout;
+  return result.stdout.startsWith(prefix)
+    ? result.stdout.slice(prefix.length)
+    : result.stdout;
 }
 
-export async function getOriginUrl(cwd: string): Promise<string> {
+export function getOriginUrl(cwd: string): Promise<string> {
   return runGit(["remote", "get-url", "origin"], { cwd });
 }
 

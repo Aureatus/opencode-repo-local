@@ -19,5 +19,8 @@ export function toRepoPluginError(error: unknown): RepoPluginError {
     return new RepoPluginError("INTERNAL_ERROR", error.message);
   }
 
-  return new RepoPluginError("INTERNAL_ERROR", "Unknown failure while handling repository operation");
+  return new RepoPluginError(
+    "INTERNAL_ERROR",
+    "Unknown failure while handling repository operation"
+  );
 }

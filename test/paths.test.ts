@@ -10,7 +10,7 @@ describe("buildRepoPath", () => {
       host: "github.com",
       pathSegments: ["anomalyco", "opencode"],
       canonicalUrl: "https://github.com/anomalyco/opencode.git",
-      key: "github.com/anomalyco/opencode"
+      key: "github.com/anomalyco/opencode",
     };
 
     const output = buildRepoPath("/tmp/opencode-repos", parsed);

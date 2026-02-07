@@ -25,10 +25,13 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:integration": "bun run scripts/integration-test.ts",
-    "check:core": "bun run typecheck && bun run test && bun run build",
+    "check:no-ignores": "bun run scripts/check-no-ignores.ts",
+    "lint": "ultracite check",
+    "check:core": "bun run check:no-ignores && bun run lint && bun run typecheck && bun run test && bun run build",
     "check": "concurrently --kill-others-on-fail --success all --names core,integration \"bun run check:core\" \"bun run test:integration\"",
     "prepare": "husky",
-    "prepack": "bun run build"
+    "prepack": "bun run build",
+    "fix": "ultracite fix"
   },
   "keywords": [
     "opencode",
@@ -44,10 +47,12 @@
     "@opencode-ai/plugin": "^1.0.150"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.3.13",
     "@types/bun": "latest",
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "tsdown": "^0.14.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "ultracite": "7.1.4"
   }
 }

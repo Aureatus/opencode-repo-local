@@ -2,15 +2,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { repoEnsureLocal } from "../src/tools/repoEnsureLocal";
+import { repoEnsureLocal } from "../src/tools/repo-ensure-local";
 
-type IntegrationSummary = {
+interface IntegrationSummary {
   repo: string;
   cloneRoot: string;
   firstStatus: string;
   secondStatus: string;
   localPath: string;
-};
+}
 
 function assertValidStatus(value: string): void {
   const valid = new Set(["cloned", "updated", "already-current", "fetched"]);
@@ -21,26 +21,30 @@ function assertValidStatus(value: string): void {
 
 async function main(): Promise<void> {
   const repo =
-    Bun.argv[2] || process.env.OPENCODE_REPO_INTEGRATION_REPO || "https://github.com/Aureatus/opencode-repo-local-plugin.git";
+    process.argv[2] ||
+    process.env.OPENCODE_REPO_INTEGRATION_REPO ||
+    "https://github.com/Aureatus/opencode-repo-local-plugin.git";
   const keep = process.env.OPENCODE_REPO_INTEGRATION_KEEP === "true";
   const providedRoot = process.env.OPENCODE_REPO_INTEGRATION_ROOT;
 
   const createdTempRoot = !providedRoot;
-  const cloneRoot = providedRoot || (await mkdtemp(path.join(os.tmpdir(), "opencode-repo-local-plugin-")));
+  const cloneRoot =
+    providedRoot ||
+    (await mkdtemp(path.join(os.tmpdir(), "opencode-repo-local-plugin-")));
 
   try {
     const first = await repoEnsureLocal({
       repo,
       clone_root: cloneRoot,
       update_mode: "fetch-only",
-      allow_ssh: true
+      allow_ssh: true,
     });
 
     const second = await repoEnsureLocal({
       repo,
       clone_root: cloneRoot,
       update_mode: "fetch-only",
-      allow_ssh: true
+      allow_ssh: true,
     });
 
     assertValidStatus(first.status);
@@ -55,7 +59,7 @@ async function main(): Promise<void> {
       cloneRoot,
       firstStatus: first.status,
       secondStatus: second.status,
-      localPath: first.local_path
+      localPath: first.local_path,
     };
 
     console.log("Integration test passed");
