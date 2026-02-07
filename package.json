@@ -25,7 +25,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:integration": "bun run scripts/integration-test.ts",
-    "check": "bun run typecheck && bun run test && bun run build && bun run test:integration",
+    "check:core": "bun run typecheck && bun run test && bun run build",
+    "check": "concurrently --kill-others-on-fail --success all --names core,integration \"bun run check:core\" \"bun run test:integration\"",
     "prepare": "husky",
     "prepack": "bun run build"
   },
@@ -44,6 +45,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "tsdown": "^0.14.2",
     "typescript": "^5.9.3"

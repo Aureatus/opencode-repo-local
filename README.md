@@ -80,7 +80,7 @@ bun run build
 
 Integration script notes:
 
-- Default repo: `https://github.com/anomalyco/opencode.git`
+- Default repo: `https://github.com/Aureatus/opencode-repo-local-plugin.git`
 - Override repo: `bun run test:integration -- https://github.com/OWNER/REPO.git`
 - Keep clone directory for inspection: `OPENCODE_REPO_INTEGRATION_KEEP=true bun run test:integration`
 - Set custom clone root: `OPENCODE_REPO_INTEGRATION_ROOT=/abs/path bun run test:integration`
@@ -88,7 +88,8 @@ Integration script notes:
 ## Git hooks
 
 - This repo uses Husky for pre-commit and pre-push hooks.
-- Full local check command: `bun run check` (runs `typecheck`, `test`, `build`, and `test:integration`).
+- Full local check command: `bun run check` (runs `check:core` and `test:integration` in parallel).
+- Core check command: `bun run check:core` (runs `typecheck`, `test`, and `build`).
 - Pre-commit command: `bun run check`.
 - Pre-push command: `bun run check`.
 - Hooks are installed by running `bun install` via the `prepare` script.

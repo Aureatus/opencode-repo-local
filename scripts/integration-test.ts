@@ -20,7 +20,8 @@ function assertValidStatus(value: string): void {
 }
 
 async function main(): Promise<void> {
-  const repo = Bun.argv[2] || process.env.OPENCODE_REPO_INTEGRATION_REPO || "https://github.com/anomalyco/opencode.git";
+  const repo =
+    Bun.argv[2] || process.env.OPENCODE_REPO_INTEGRATION_REPO || "https://github.com/Aureatus/opencode-repo-local-plugin.git";
   const keep = process.env.OPENCODE_REPO_INTEGRATION_KEEP === "true";
   const providedRoot = process.env.OPENCODE_REPO_INTEGRATION_ROOT;
 
