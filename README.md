@@ -93,8 +93,9 @@ Integration script notes:
 - This repo uses Husky for pre-commit and pre-push hooks.
 - Full local check command: `bun run check` (runs `check:core` and `test:integration` in parallel).
 - Core check command: `bun run check:core` (runs `check:no-ignores`, `lint`, `typecheck`, `test`, and `build`).
+- Build command: `bun run build` (`tsdown --fail-on-warn`, warnings fail the build).
 - Ignore-guard command: `bun run check:no-ignores` (fails on `biome-ignore` and TS ignore directives).
-- Lint command: `bun run lint` (Ultracite/Biome).
+- Lint command: `bun run lint` (Ultracite/Biome with `--error-on-warnings`).
 - Fix command: `bun run fix` (Ultracite auto-fix).
 - Pre-commit command: `bun run check`.
 - Pre-push command: `bun run check`.
