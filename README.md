@@ -62,8 +62,18 @@ Output fields:
 - `current_ref`
 - `default_branch`
 - `head_sha`
+- `comparison_ref`
+- `remote_head_sha`
+- `ahead_by`
+- `behind_by`
+- `freshness`: `current` | `stale` | `ahead` | `diverged` | `unknown`
 - `actions`
 - `instructions`
+
+Freshness semantics:
+
+- Default `update_mode=ff-only` is the recommended one-call path for agents: it updates when safe and returns freshness metadata.
+- Use `update_mode=fetch-only` when you explicitly want non-mutating freshness/version checks.
 
 ## Environment variables
 

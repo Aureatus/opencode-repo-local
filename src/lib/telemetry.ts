@@ -13,6 +13,9 @@ interface RepoEnsureTelemetryEvent {
   canonical_repo_url: string | null;
   local_path: string | null;
   status: string | null;
+  freshness: string | null;
+  ahead_by: number | null;
+  behind_by: number | null;
   update_mode: string | null;
   ref: string | null;
   error_code: string | null;
@@ -53,6 +56,9 @@ export async function logRepoEnsureSuccess(
     canonical_repo_url: result.repo_url,
     local_path: result.local_path,
     status: result.status,
+    freshness: result.freshness,
+    ahead_by: result.ahead_by,
+    behind_by: result.behind_by,
     update_mode: args.update_mode ?? "ff-only",
     ref: args.ref ?? null,
     error_code: null,
@@ -79,6 +85,9 @@ export async function logRepoEnsureFailure(
     canonical_repo_url: null,
     local_path: null,
     status: null,
+    freshness: null,
+    ahead_by: null,
+    behind_by: null,
     update_mode: args.update_mode ?? "ff-only",
     ref: args.ref ?? null,
     error_code: parsedError.code,

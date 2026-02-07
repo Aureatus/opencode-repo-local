@@ -2,15 +2,19 @@ import { tool } from "@opencode-ai/plugin";
 
 import { RepoPluginError, toRepoPluginError } from "../lib/errors";
 import {
+  type AheadBehindCounts,
   checkoutRef,
   cloneRepo,
   directoryExists,
   ensureGitAvailable,
   fetchOrigin,
+  getAheadBehindCounts,
   getCurrentRef,
   getDefaultBranch,
   getHeadSha,
   getOriginUrl,
+  getRefSha,
+  getUpstreamRef,
   hardResetToOriginBranch,
   isGitRepository,
   isWorktreeDirty,
@@ -22,6 +26,7 @@ import type {
   RepoEnsureLocalArgs,
   RepoEnsureResult,
   RepoEnsureStatus,
+  RepoFreshnessStatus,
   UpdateMode,
 } from "../lib/types";
 import { parseRepoUrl } from "../lib/url";
@@ -68,6 +73,14 @@ const REPO_TOOL_ARGS = {
 
 const ALLOWED_KEYS = new Set(Object.keys(REPO_TOOL_ARGS));
 
+interface RepoFreshnessDetails {
+  comparisonRef: string | null;
+  remoteHeadSha: string | null;
+  aheadBy: number | null;
+  behindBy: number | null;
+  freshness: RepoFreshnessStatus;
+}
+
 function normalizeUpdateMode(value: string | undefined): UpdateMode {
   const mode = (value ?? "ff-only").trim();
   if (!UPDATE_MODES.has(mode)) {
@@ -99,6 +112,76 @@ function assertKnownArgs(args: RepoEnsureLocalArgs): void {
       `Unknown arguments: ${extraKeys.join(", ")}`
     );
   }
+}
+
+function deriveFreshnessFromCounts(
+  counts: AheadBehindCounts | null
+): RepoFreshnessStatus {
+  if (!counts) {
+    return "unknown";
+  }
+
+  if (counts.aheadBy === 0 && counts.behindBy === 0) {
+    return "current";
+  }
+
+  if (counts.aheadBy > 0 && counts.behindBy === 0) {
+    return "ahead";
+  }
+
+  if (counts.aheadBy === 0 && counts.behindBy > 0) {
+    return "stale";
+  }
+
+  return "diverged";
+}
+
+async function resolveComparisonRef(
+  localPath: string,
+  currentRef: string
+): Promise<string | null> {
+  const upstreamRef = await getUpstreamRef(localPath);
+  if (upstreamRef) {
+    return upstreamRef;
+  }
+
+  if (currentRef === "HEAD") {
+    return null;
+  }
+
+  const fallback = `origin/${currentRef}`;
+  const fallbackSha = await getRefSha(localPath, fallback);
+  if (!fallbackSha) {
+    return null;
+  }
+
+  return fallback;
+}
+
+async function computeFreshnessDetails(
+  localPath: string,
+  currentRef: string
+): Promise<RepoFreshnessDetails> {
+  const comparisonRef = await resolveComparisonRef(localPath, currentRef);
+  if (!comparisonRef) {
+    return {
+      comparisonRef: null,
+      remoteHeadSha: null,
+      aheadBy: null,
+      behindBy: null,
+      freshness: "unknown",
+    };
+  }
+
+  const remoteHeadSha = await getRefSha(localPath, comparisonRef);
+  const counts = await getAheadBehindCounts(localPath, "HEAD", comparisonRef);
+  return {
+    comparisonRef,
+    remoteHeadSha,
+    aheadBy: counts?.aheadBy ?? null,
+    behindBy: counts?.behindBy ?? null,
+    freshness: deriveFreshnessFromCounts(counts),
+  };
 }
 
 async function checkoutIfRequested(
@@ -252,13 +335,21 @@ export async function repoEnsureLocal(
         actions
       );
 
+  const currentRef = await getCurrentRef(localPath);
+  const freshness = await computeFreshnessDetails(localPath, currentRef);
+
   return {
     status,
     repo_url: parsedRepo.canonicalUrl,
     local_path: localPath,
-    current_ref: await getCurrentRef(localPath),
+    current_ref: currentRef,
     default_branch: await getDefaultBranch(localPath),
     head_sha: await getHeadSha(localPath),
+    comparison_ref: freshness.comparisonRef,
+    remote_head_sha: freshness.remoteHeadSha,
+    ahead_by: freshness.aheadBy,
+    behind_by: freshness.behindBy,
+    freshness: freshness.freshness,
     actions,
     instructions: [
       `Use built-in tools with local_path: ${localPath}`,
@@ -269,7 +360,7 @@ export async function repoEnsureLocal(
 
 export const repoEnsureLocalTool = tool({
   description:
-    "Prepare external repositories for investigation. If a request references a GitHub/remote repo not already in the workspace, call this tool before Read/Grep/Glob/Bash so analysis is grounded in local source code. Returns absolute local_path plus head/ref metadata.",
+    "Prepare external repositories for investigation. If a request references a GitHub/remote repo not already in the workspace, call this tool before Read/Grep/Glob/Bash so analysis is grounded in local source code. Returns absolute local_path plus freshness/version metadata (head SHA, remote SHA, ahead/behind).",
   args: REPO_TOOL_ARGS,
   async execute(args) {
     const typedArgs = args as RepoEnsureLocalArgs;

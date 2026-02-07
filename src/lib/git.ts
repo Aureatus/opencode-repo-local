@@ -15,7 +15,13 @@ interface RunGitResult {
   exitCode: number;
 }
 
+export interface AheadBehindCounts {
+  aheadBy: number;
+  behindBy: number;
+}
+
 const DEFAULT_TIMEOUT_MS = 120_000;
+const WHITESPACE_PATTERN = /\s+/;
 
 function runGitRaw(
   args: string[],
@@ -184,4 +190,54 @@ export function getOriginUrl(cwd: string): Promise<string> {
 export async function isWorktreeDirty(cwd: string): Promise<boolean> {
   const output = await runGit(["status", "--porcelain"], { cwd });
   return output.length > 0;
+}
+
+export async function getUpstreamRef(cwd: string): Promise<string | null> {
+  const result = await runGitRaw(
+    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+    { cwd }
+  );
+  if (result.exitCode !== 0 || !result.stdout) {
+    return null;
+  }
+
+  return result.stdout;
+}
+
+export async function getRefSha(
+  cwd: string,
+  ref: string
+): Promise<string | null> {
+  const result = await runGitRaw(["rev-parse", ref], { cwd });
+  if (result.exitCode !== 0 || !result.stdout) {
+    return null;
+  }
+
+  return result.stdout;
+}
+
+export async function getAheadBehindCounts(
+  cwd: string,
+  localRef: string,
+  remoteRef: string
+): Promise<AheadBehindCounts | null> {
+  const result = await runGitRaw(
+    ["rev-list", "--left-right", "--count", `${localRef}...${remoteRef}`],
+    { cwd }
+  );
+  if (result.exitCode !== 0 || !result.stdout) {
+    return null;
+  }
+
+  const [leftCountRaw, rightCountRaw] = result.stdout.split(WHITESPACE_PATTERN);
+  const aheadBy = Number.parseInt(leftCountRaw ?? "", 10);
+  const behindBy = Number.parseInt(rightCountRaw ?? "", 10);
+  if (Number.isNaN(aheadBy) || Number.isNaN(behindBy)) {
+    return null;
+  }
+
+  return {
+    aheadBy,
+    behindBy,
+  };
 }

@@ -13,8 +13,28 @@ interface IntegrationSummary {
   additionalFormats: {
     repo: string;
     status: string;
+    freshness: string;
     localPath: string;
   }[];
+}
+
+function assertHasFreshnessMetadata(
+  value: Awaited<ReturnType<typeof repoEnsureLocal>>
+): void {
+  if (!value.freshness) {
+    throw new Error("freshness must be present");
+  }
+
+  const validFreshness = new Set([
+    "current",
+    "stale",
+    "ahead",
+    "diverged",
+    "unknown",
+  ]);
+  if (!validFreshness.has(value.freshness)) {
+    throw new Error(`Unexpected freshness status: ${value.freshness}`);
+  }
 }
 
 function assertValidStatus(value: string): void {
@@ -72,6 +92,7 @@ async function main(): Promise<void> {
       });
 
       assertValidStatus(result.status);
+      assertHasFreshnessMetadata(result);
       if (result.local_path !== first.local_path) {
         throw new Error(
           `Expected shared local_path across formats, got ${result.local_path}`
@@ -81,12 +102,15 @@ async function main(): Promise<void> {
       additionalFormats.push({
         repo,
         status: result.status,
+        freshness: result.freshness,
         localPath: result.local_path,
       });
     }
 
     assertValidStatus(first.status);
     assertValidStatus(second.status);
+    assertHasFreshnessMetadata(first);
+    assertHasFreshnessMetadata(second);
 
     if (!first.local_path.startsWith(path.resolve(cloneRoot))) {
       throw new Error("local_path does not resolve under clone root");
