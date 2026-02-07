@@ -44,6 +44,14 @@
     "git",
     "clone"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Aureatus/opencode-repo-local"
+  },
+  "homepage": "https://github.com/Aureatus/opencode-repo-local",
+  "bugs": {
+    "url": "https://github.com/Aureatus/opencode-repo-local/issues"
+  },
   "license": "MIT",
   "peerDependencies": {
     "typescript": "^5.0.0"
