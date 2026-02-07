@@ -36,7 +36,7 @@ const REPO_TOOL_ARGS = {
   repo: tool.schema
     .string()
     .describe(
-      "Repository URL to clone/update locally. Use this when a user references a GitHub repo or any remote repo outside the current workspace, including repo-specific conceptual questions that need grounded code inspection."
+      "Remote repository reference to prepare locally. Use this FIRST when a user references a GitHub/remote repo outside the current workspace and the agent needs grounded code inspection. Accepted forms include owner/repo, host/owner/repo, and https URLs."
     ),
   ref: tool.schema
     .string()
@@ -45,7 +45,9 @@ const REPO_TOOL_ARGS = {
   clone_root: tool.schema
     .string()
     .optional()
-    .describe("Optional absolute clone root path override."),
+    .describe(
+      "Optional absolute clone root path override. Useful in tests and CI for isolated temporary clone directories."
+    ),
   depth: tool.schema
     .number()
     .int()
@@ -267,7 +269,7 @@ export async function repoEnsureLocal(
 
 export const repoEnsureLocalTool = tool({
   description:
-    "When a user references a GitHub/remote repository, clone or update it locally so OpenCode can investigate with built-in tools (Read, Grep, Glob, Bash). Also useful for repo-specific conceptual analysis when grounding answers in real source code improves reliability. Returns absolute local_path.",
+    "Prepare external repositories for investigation. If a request references a GitHub/remote repo not already in the workspace, call this tool before Read/Grep/Glob/Bash so analysis is grounded in local source code. Returns absolute local_path plus head/ref metadata.",
   args: REPO_TOOL_ARGS,
   async execute(args) {
     const typedArgs = args as RepoEnsureLocalArgs;
