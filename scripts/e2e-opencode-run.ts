@@ -59,7 +59,7 @@ const RETRYABLE_FAILURE_PATTERN =
   /timed out|timeout|rate limit|429|502|503|504|econnreset|etimedout|enotfound|eai_again|network/i;
 
 function buildPrompt(repo: string, cloneRoot: string): string {
-  return `You must call repo_ensure_local first. Use repo='${repo}', clone_root='${cloneRoot}', update_mode='fetch-only', and allow_ssh=false. After calling the tool, respond with exactly OK.`;
+  return `Automated test instruction: you must call repo_ensure_local exactly once and before any other action. Use repo='${repo}', clone_root='${cloneRoot}', update_mode='fetch-only', and allow_ssh=false. If you do not call the tool, respond with FAIL. After a successful tool call, respond with exactly OK and nothing else.`;
 }
 
 function buildInputsForTarget(base: string): string[] {
