@@ -83,3 +83,10 @@ Integration script notes:
 - Override repo: `bun run test:integration -- https://github.com/OWNER/REPO.git`
 - Keep clone directory for inspection: `OPENCODE_REPO_INTEGRATION_KEEP=true bun run test:integration`
 - Set custom clone root: `OPENCODE_REPO_INTEGRATION_ROOT=/abs/path bun run test:integration`
+
+## Git hooks
+
+- This repo uses Husky for pre-commit and pre-push hooks.
+- Pre-commit command: `bun run check:commit` (runs `typecheck` and `test`).
+- Pre-push command: `bun run check:push` (runs `check:commit` and `build`).
+- Hooks are installed by running `bun install` via the `prepare` script.
