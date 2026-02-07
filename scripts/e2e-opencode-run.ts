@@ -20,6 +20,11 @@ interface RepoCase {
   input: string;
 }
 
+interface RepoCaseContext {
+  repoCase: RepoCase;
+  telemetryPath: string;
+}
+
 interface TargetSummary {
   target: string;
   testedInputs: string[];
@@ -45,9 +50,16 @@ const E2E_REPO_TARGETS: readonly RepoTarget[] = [
 ];
 
 const COMMAND_TIMEOUT_MS = 180_000;
+const COMMAND_RETRY_DELAY_MS = 5000;
+const MAX_COMMAND_ATTEMPTS = Number.parseInt(
+  process.env.OPENCODE_REPO_E2E_MAX_ATTEMPTS ?? "2",
+  10
+);
+const RETRYABLE_FAILURE_PATTERN =
+  /timed out|timeout|rate limit|429|502|503|504|econnreset|etimedout|enotfound|eai_again|network/i;
 
 function buildPrompt(repo: string, cloneRoot: string): string {
-  return `You must call repo_ensure_local first. Use repo='${repo}', clone_root='${cloneRoot}', update_mode='fetch-only', and allow_ssh=false. After calling the tool, respond with exactly OK.`;
+  return `Automated test instruction: you must call repo_ensure_local exactly once and before any other action. Use repo='${repo}', clone_root='${cloneRoot}', update_mode='fetch-only', and allow_ssh=false. If you do not call the tool, respond with FAIL. After a successful tool call, respond with exactly OK and nothing else.`;
 }
 
 function buildInputsForTarget(base: string): string[] {
@@ -117,6 +129,118 @@ function runOpencodeCommand(
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function shouldRetryFailure(stdout: string, stderr: string): boolean {
+  return RETRYABLE_FAILURE_PATTERN.test(`${stdout}\n${stderr}`);
+}
+
+async function readTelemetryEventsForPath(
+  telemetryPath: string
+): Promise<TelemetryEvent[]> {
+  try {
+    const telemetryRaw = await readFile(telemetryPath, "utf8");
+    return parseTelemetry(telemetryRaw);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+}
+
+function hasSuccessfulEventForInput(
+  telemetryEvents: TelemetryEvent[],
+  repoInput: string
+): boolean {
+  return telemetryEvents.some(
+    (event) => event.repo_input === repoInput && event.ok
+  );
+}
+
+function isFinalAttempt(attempt: number): boolean {
+  return attempt >= MAX_COMMAND_ATTEMPTS;
+}
+
+function shouldRetryResult(attempt: number, result: CommandResult): boolean {
+  return (
+    !isFinalAttempt(attempt) && shouldRetryFailure(result.stdout, result.stderr)
+  );
+}
+
+function shouldRetryError(attempt: number, error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return !isFinalAttempt(attempt) && RETRYABLE_FAILURE_PATTERN.test(message);
+}
+
+async function hasTelemetryEvent(
+  telemetryPath: string,
+  repoInput: string
+): Promise<boolean> {
+  const telemetryEvents = await readTelemetryEventsForPath(telemetryPath);
+  return hasSuccessfulEventForInput(telemetryEvents, repoInput);
+}
+
+function throwMissingTelemetryError(
+  repoInput: string,
+  result: CommandResult
+): never {
+  throw new Error(
+    `opencode run returned success but no telemetry event for ${repoInput}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+  );
+}
+
+async function runOpencodeCommandWithRetry(
+  prompt: string,
+  telemetryPath: string,
+  repoInput: string
+): Promise<CommandResult> {
+  let attempt = 1;
+
+  while (attempt <= MAX_COMMAND_ATTEMPTS) {
+    try {
+      const result = await runOpencodeCommand(prompt, telemetryPath);
+      if (result.code === 0) {
+        if (await hasTelemetryEvent(telemetryPath, repoInput)) {
+          return result;
+        }
+
+        if (isFinalAttempt(attempt)) {
+          throwMissingTelemetryError(repoInput, result);
+        }
+
+        console.warn(
+          `Retrying opencode run for ${repoInput} because no successful telemetry event was recorded`
+        );
+      } else if (shouldRetryResult(attempt, result)) {
+        console.warn(
+          `Retrying opencode run for ${repoInput} after attempt ${attempt}/${MAX_COMMAND_ATTEMPTS}`
+        );
+      } else {
+        return result;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (shouldRetryError(attempt, error)) {
+        console.warn(
+          `Retrying opencode run for ${repoInput} after transient error: ${message}`
+        );
+      } else {
+        throw error;
+      }
+    }
+
+    await sleep(COMMAND_RETRY_DELAY_MS * attempt);
+    attempt += 1;
+  }
+
+  throw new Error(`Failed to run opencode for ${repoInput}`);
+}
+
 function parseTelemetry(text: string): TelemetryEvent[] {
   const lines = text
     .split("\n")
@@ -146,21 +270,39 @@ async function main(): Promise<void> {
   const repoCases = buildRepoCases();
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "opencode-repo-e2e-"));
   const cloneRoot = path.join(tempRoot, "clones");
-  const telemetryPath = path.join(tempRoot, "telemetry.jsonl");
+  const telemetryContexts: RepoCaseContext[] = repoCases.map(
+    (repoCase, index) => {
+      return {
+        repoCase,
+        telemetryPath: path.join(tempRoot, `telemetry-${index}.jsonl`),
+      };
+    }
+  );
 
   try {
-    for (const repoCase of repoCases) {
-      const prompt = buildPrompt(repoCase.input, cloneRoot);
-      const result = await runOpencodeCommand(prompt, telemetryPath);
-      if (result.code !== 0) {
-        throw new Error(
-          `opencode run failed for ${repoCase.input}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    await Promise.all(
+      telemetryContexts.map(async ({ repoCase, telemetryPath }) => {
+        const prompt = buildPrompt(repoCase.input, cloneRoot);
+        const result = await runOpencodeCommandWithRetry(
+          prompt,
+          telemetryPath,
+          repoCase.input
         );
-      }
-    }
+        if (result.code !== 0) {
+          throw new Error(
+            `opencode run failed for ${repoCase.input}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+          );
+        }
+      })
+    );
 
-    const telemetryRaw = await readFile(telemetryPath, "utf8");
-    const telemetryEvents = parseTelemetry(telemetryRaw);
+    const telemetryEventGroups = await Promise.all(
+      telemetryContexts.map(async ({ telemetryPath }) => {
+        const telemetryRaw = await readFile(telemetryPath, "utf8");
+        return parseTelemetry(telemetryRaw);
+      })
+    );
+    const telemetryEvents = telemetryEventGroups.flat();
     if (telemetryEvents.length < repoCases.length) {
       throw new Error(
         `Expected at least ${repoCases.length} telemetry events, got ${telemetryEvents.length}`
@@ -212,7 +354,7 @@ async function main(): Promise<void> {
       JSON.stringify(
         {
           cloneRoot,
-          telemetryPath,
+          telemetryDirectory: tempRoot,
           testedTargets: E2E_REPO_TARGETS.map((target) => target.base),
           targetSummaries,
           telemetryEvents: repoCases.length,
