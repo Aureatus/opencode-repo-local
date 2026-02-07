@@ -39,6 +39,22 @@ bun install
 
 4. Or publish and install via npm for regular usage.
 
+5. To run OpenCode with the **npm-installed plugin** (without this repo's local shim), use:
+
+```bash
+bun run opencode:npm
+```
+
+This launches OpenCode in an isolated sandbox directory with `opencode-repo-local` injected via `OPENCODE_CONFIG_CONTENT`.
+
+Quick verification:
+
+```bash
+bun run opencode:npm:config
+```
+
+Expected plugin list includes `opencode-repo-local` and does not include `.opencode/plugins/repo-local-plugin.ts`.
+
 ## Tool: `repo_ensure_local`
 
 Arguments:
@@ -171,6 +187,7 @@ Integration script notes:
 E2E script notes:
 
 - `bun run test:e2e` runs real `opencode run` prompts and asserts tool usage via telemetry.
+- `bun run test:e2e:npm` runs the same E2E suite in npm mode (isolated sandbox + `opencode-repo-local` injected via config override, without local shim plugin).
 - It validates all supported repo input formats across two required targets:
   - `Aureatus/opencode-repo-local`
   - `ghoulr/opencode-websearch-cited`

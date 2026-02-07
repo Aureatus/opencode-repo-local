@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -23,6 +23,13 @@ interface RepoCase {
 interface RepoCaseContext {
   repoCase: RepoCase;
   telemetryPath: string;
+}
+
+type E2EMode = "local" | "npm";
+
+interface RunEnvironment {
+  cwd: string;
+  envOverrides: Record<string, string>;
 }
 
 interface TargetSummary {
@@ -57,6 +64,12 @@ const MAX_COMMAND_ATTEMPTS = Number.parseInt(
 );
 const RETRYABLE_FAILURE_PATTERN =
   /timed out|timeout|rate limit|429|502|503|504|econnreset|etimedout|enotfound|eai_again|network/i;
+const E2E_NPM_SANDBOX_DIRECTORY = path.join(
+  os.homedir(),
+  ".cache",
+  "opencode-repo-local",
+  "npm-e2e-sandbox"
+);
 
 function buildPrompt(repo: string, cloneRoot: string): string {
   return `Automated test instruction: you must call repo_ensure_local exactly once and before any other action. Use repo='${repo}', clone_root='${cloneRoot}', update_mode='fetch-only', and allow_ssh=false. If you do not call the tool, respond with FAIL. After a successful tool call, respond with exactly OK and nothing else.`;
@@ -83,16 +96,62 @@ function buildRepoCases(): RepoCase[] {
   return output;
 }
 
+function parseMode(argv: string[]): E2EMode {
+  const modeArgIndex = argv.indexOf("--mode");
+  if (modeArgIndex === -1) {
+    return "local";
+  }
+
+  const selected = argv[modeArgIndex + 1];
+  if (selected === "npm") {
+    return "npm";
+  }
+
+  if (selected === "local") {
+    return "local";
+  }
+
+  throw new Error(
+    `Invalid --mode value: ${selected ?? "<missing>"}. Use --mode local or --mode npm.`
+  );
+}
+
+async function buildRunEnvironment(mode: E2EMode): Promise<RunEnvironment> {
+  if (mode === "local") {
+    return {
+      cwd: process.cwd(),
+      envOverrides: {},
+    };
+  }
+
+  await mkdir(E2E_NPM_SANDBOX_DIRECTORY, { recursive: true });
+  return {
+    cwd: E2E_NPM_SANDBOX_DIRECTORY,
+    envOverrides: {
+      OPENCODE_CONFIG_CONTENT: JSON.stringify({
+        plugin: ["opencode-repo-local"],
+        permission: {
+          external_directory: {
+            "~/.opencode/repos/**": "allow",
+          },
+        },
+      }),
+    },
+  };
+}
+
 function runOpencodeCommand(
   prompt: string,
-  telemetryPath: string
+  telemetryPath: string,
+  runEnvironment: RunEnvironment
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("opencode", ["run", prompt], {
-      cwd: process.cwd(),
+      cwd: runEnvironment.cwd,
       env: {
         ...process.env,
         OPENCODE_REPO_TELEMETRY_PATH: telemetryPath,
+        ...runEnvironment.envOverrides,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -197,13 +256,18 @@ function throwMissingTelemetryError(
 async function runOpencodeCommandWithRetry(
   prompt: string,
   telemetryPath: string,
-  repoInput: string
+  repoInput: string,
+  runEnvironment: RunEnvironment
 ): Promise<CommandResult> {
   let attempt = 1;
 
   while (attempt <= MAX_COMMAND_ATTEMPTS) {
     try {
-      const result = await runOpencodeCommand(prompt, telemetryPath);
+      const result = await runOpencodeCommand(
+        prompt,
+        telemetryPath,
+        runEnvironment
+      );
       if (result.code === 0) {
         if (await hasTelemetryEvent(telemetryPath, repoInput)) {
           return result;
@@ -266,10 +330,12 @@ async function assertLocalPathExists(localPath: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const mode = parseMode(process.argv.slice(2));
   const keep = process.env.OPENCODE_REPO_E2E_KEEP === "true";
   const repoCases = buildRepoCases();
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "opencode-repo-e2e-"));
   const cloneRoot = path.join(tempRoot, "clones");
+  const runEnvironment = await buildRunEnvironment(mode);
   const telemetryContexts: RepoCaseContext[] = repoCases.map(
     (repoCase, index) => {
       return {
@@ -286,7 +352,8 @@ async function main(): Promise<void> {
         const result = await runOpencodeCommandWithRetry(
           prompt,
           telemetryPath,
-          repoCase.input
+          repoCase.input,
+          runEnvironment
         );
         if (result.code !== 0) {
           throw new Error(
@@ -353,6 +420,7 @@ async function main(): Promise<void> {
     console.log(
       JSON.stringify(
         {
+          mode,
           cloneRoot,
           telemetryDirectory: tempRoot,
           testedTargets: E2E_REPO_TARGETS.map((target) => target.base),
