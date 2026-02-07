@@ -32,7 +32,11 @@ const UPDATE_MODES: ReadonlySet<string> = new Set([
 ]);
 
 const REPO_TOOL_ARGS = {
-  repo: tool.schema.string().describe("Repository URL to clone or update."),
+  repo: tool.schema
+    .string()
+    .describe(
+      "Repository URL to clone/update locally. Use this when a user references a GitHub repo or any remote repo outside the current workspace."
+    ),
   ref: tool.schema
     .string()
     .optional()
@@ -262,7 +266,7 @@ export async function repoEnsureLocal(
 
 export const repoEnsureLocalTool = tool({
   description:
-    "Clone or update a repository locally and return its absolute path for OpenCode built-in tools.",
+    "When a user references a GitHub/remote repository, clone or update it locally so OpenCode can investigate with built-in tools (Read, Grep, Glob, Bash). Returns absolute local_path.",
   args: REPO_TOOL_ARGS,
   async execute(args) {
     try {
