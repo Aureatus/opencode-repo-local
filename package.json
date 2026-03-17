@@ -20,6 +20,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "release:publish:patch": "git fetch origin && git switch main && git pull --ff-only origin main && bun run release:verify && bun run release:patch && git push origin main --follow-tags",
     "dev": "bunx tsdown --watch",
     "build": "bunx tsdown --fail-on-warn",
     "typecheck": "tsc --noEmit",
