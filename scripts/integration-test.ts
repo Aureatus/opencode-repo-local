@@ -65,19 +65,20 @@ async function main(): Promise<void> {
   const cloneRoot =
     providedRoot ||
     (await mkdtemp(path.join(os.tmpdir(), "opencode-repo-local-")));
+  const previousCloneRoot = process.env.OPENCODE_REPO_CLONE_ROOT;
 
   try {
+    process.env.OPENCODE_REPO_CLONE_ROOT = cloneRoot;
+
     const primaryRepo = repoInputs[0];
     const first = await repoEnsureLocal({
       repo: primaryRepo,
-      clone_root: cloneRoot,
       update_mode: "fetch-only",
       allow_ssh: true,
     });
 
     const second = await repoEnsureLocal({
       repo: primaryRepo,
-      clone_root: cloneRoot,
       update_mode: "fetch-only",
       allow_ssh: true,
     });
@@ -86,7 +87,6 @@ async function main(): Promise<void> {
     for (const repo of repoInputs.slice(1)) {
       const result = await repoEnsureLocal({
         repo,
-        clone_root: cloneRoot,
         update_mode: "fetch-only",
         allow_ssh: true,
       });
@@ -128,6 +128,12 @@ async function main(): Promise<void> {
     console.log("Integration test passed");
     console.log(JSON.stringify(summary, null, 2));
   } finally {
+    if (previousCloneRoot) {
+      process.env.OPENCODE_REPO_CLONE_ROOT = previousCloneRoot;
+    } else {
+      process.env.OPENCODE_REPO_CLONE_ROOT = undefined;
+    }
+
     if (createdTempRoot && !keep) {
       await rm(cloneRoot, { recursive: true, force: true });
     }

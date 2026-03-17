@@ -62,10 +62,9 @@ Arguments:
 - `repo` (required): repository reference in one of these forms:
   - `https://host/owner/repo(.git)`
   - `git@host:owner/repo.git` (when `allow_ssh` is true)
-  - `host/owner/repo`
-  - `owner/repo` (GitHub shorthand)
+- `host/owner/repo`
+- `owner/repo` (GitHub shorthand)
 - `ref` (optional): branch/tag/SHA to checkout after clone/fetch
-- `clone_root` (optional): absolute path override for clone root
 - `depth` (optional): shallow clone depth
 - `update_mode` (optional): `ff-only` (default), `fetch-only`, `reset-clean`
 - `allow_ssh` (optional): allow `git@host:owner/repo.git` URLs
@@ -100,7 +99,7 @@ Auth mode semantics:
 
 ## Environment variables
 
-- `OPENCODE_REPO_CLONE_ROOT`: default clone root (fallback is `~/.opencode/repos`)
+- `OPENCODE_REPO_CLONE_ROOT`: env-only clone root override for testing/CI (fallback is `~/.opencode/repos`)
 - `OPENCODE_REPO_ALLOW_SSH=true`: default SSH URL allowance
 - `OPENCODE_REPO_TELEMETRY_PATH`: optional telemetry JSONL path override
 

@@ -71,8 +71,12 @@ const E2E_NPM_SANDBOX_DIRECTORY = path.join(
   "npm-e2e-sandbox"
 );
 
-function buildPrompt(repo: string, cloneRoot: string): string {
-  return `Automated test instruction: you must call repo_ensure_local exactly once and before any other action. Use repo='${repo}', clone_root='${cloneRoot}', update_mode='fetch-only', and allow_ssh=false. If you do not call the tool, respond with FAIL. After a successful tool call, respond with exactly OK and nothing else.`;
+function buildPrompt(repo: string): string {
+  return `Automated test instruction: you must call repo_ensure_local exactly once and before any other action. Use repo='${repo}', update_mode='fetch-only', and allow_ssh=false. If you do not call the tool, respond with FAIL. After a successful tool call, respond with exactly OK and nothing else.`;
+}
+
+function toExternalDirectoryPattern(cloneRoot: string): string {
+  return `${cloneRoot.replaceAll("\\", "/")}/**`;
 }
 
 function buildInputsForTarget(base: string): string[] {
@@ -116,23 +120,31 @@ function parseMode(argv: string[]): E2EMode {
   );
 }
 
-async function buildRunEnvironment(mode: E2EMode): Promise<RunEnvironment> {
+async function buildRunEnvironment(
+  mode: E2EMode,
+  cloneRoot: string
+): Promise<RunEnvironment> {
   if (mode === "local") {
     return {
       cwd: process.cwd(),
-      envOverrides: {},
+      envOverrides: {
+        OPENCODE_REPO_CLONE_ROOT: cloneRoot,
+      },
     };
   }
 
   await mkdir(E2E_NPM_SANDBOX_DIRECTORY, { recursive: true });
+  const cloneRootPattern = toExternalDirectoryPattern(cloneRoot);
   return {
     cwd: E2E_NPM_SANDBOX_DIRECTORY,
     envOverrides: {
+      OPENCODE_REPO_CLONE_ROOT: cloneRoot,
       OPENCODE_CONFIG_CONTENT: JSON.stringify({
         plugin: ["opencode-repo-local"],
         permission: {
           external_directory: {
             "~/.opencode/repos/**": "allow",
+            [cloneRootPattern]: "allow",
           },
         },
       }),
@@ -335,7 +347,7 @@ async function main(): Promise<void> {
   const repoCases = buildRepoCases();
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "opencode-repo-e2e-"));
   const cloneRoot = path.join(tempRoot, "clones");
-  const runEnvironment = await buildRunEnvironment(mode);
+  const runEnvironment = await buildRunEnvironment(mode, cloneRoot);
   const telemetryContexts: RepoCaseContext[] = repoCases.map(
     (repoCase, index) => {
       return {
@@ -348,7 +360,7 @@ async function main(): Promise<void> {
   try {
     await Promise.all(
       telemetryContexts.map(async ({ repoCase, telemetryPath }) => {
-        const prompt = buildPrompt(repoCase.input, cloneRoot);
+        const prompt = buildPrompt(repoCase.input);
         const result = await runOpencodeCommandWithRetry(
           prompt,
           telemetryPath,

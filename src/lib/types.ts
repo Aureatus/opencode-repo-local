@@ -17,11 +17,10 @@ export type RepoFreshnessStatus =
 export interface RepoEnsureLocalArgs {
   repo: string;
   ref?: string;
-  clone_root?: string;
   depth?: number;
-  update_mode?: string;
+  update_mode?: UpdateMode;
   allow_ssh?: boolean;
-  auth_mode?: string;
+  auth_mode?: AuthMode;
 }
 
 export interface ParsedRepoUrl {

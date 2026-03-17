@@ -35,11 +35,9 @@ import type {
 } from "../lib/types";
 import { parseRepoUrl } from "../lib/url";
 
-const UPDATE_MODES: ReadonlySet<string> = new Set([
-  "ff-only",
-  "fetch-only",
-  "reset-clean",
-]);
+const UPDATE_MODE_VALUES = ["ff-only", "fetch-only", "reset-clean"] as const;
+
+const UPDATE_MODES: ReadonlySet<string> = new Set(UPDATE_MODE_VALUES);
 
 const REPO_TOOL_ARGS = {
   repo: tool.schema
@@ -51,12 +49,6 @@ const REPO_TOOL_ARGS = {
     .string()
     .optional()
     .describe("Optional branch/tag/sha to checkout after clone/fetch."),
-  clone_root: tool.schema
-    .string()
-    .optional()
-    .describe(
-      "Optional absolute clone root path override. Useful in tests and CI for isolated temporary clone directories."
-    ),
   depth: tool.schema
     .number()
     .int()
@@ -64,7 +56,7 @@ const REPO_TOOL_ARGS = {
     .optional()
     .describe("Optional shallow clone depth."),
   update_mode: tool.schema
-    .string()
+    .enum(UPDATE_MODE_VALUES)
     .optional()
     .describe("Update policy: ff-only (default), fetch-only, or reset-clean."),
   allow_ssh: tool.schema
@@ -369,7 +361,7 @@ export async function repoEnsureLocal(
 
   await ensureGitAvailable();
 
-  const cloneRoot = await resolveCloneRoot(args.clone_root);
+  const cloneRoot = await resolveCloneRoot();
   const localPath = buildRepoPath(cloneRoot, parsedRepo);
   const actions: string[] = [];
 

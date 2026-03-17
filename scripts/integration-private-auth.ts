@@ -120,16 +120,18 @@ async function main(): Promise<void> {
   const cloneRoot =
     providedRoot ||
     (await mkdtemp(path.join(os.tmpdir(), "opencode-repo-local-private-")));
+  const previousCloneRoot = process.env.OPENCODE_REPO_CLONE_ROOT;
 
   const outcomes: CaseOutcome[] = [];
 
   try {
+    process.env.OPENCODE_REPO_CLONE_ROOT = cloneRoot;
+
     if (httpsRepo) {
       outcomes.push(
         await runCase("https", () =>
           repoEnsureLocal({
             repo: httpsRepo,
-            clone_root: cloneRoot,
             update_mode: "fetch-only",
             auth_mode: "https",
           })
@@ -140,7 +142,6 @@ async function main(): Promise<void> {
         await runCase("auto", () =>
           repoEnsureLocal({
             repo: httpsRepo,
-            clone_root: cloneRoot,
             update_mode: "fetch-only",
             auth_mode: "auto",
             allow_ssh: true,
@@ -154,7 +155,6 @@ async function main(): Promise<void> {
         await runCase("ssh", () =>
           repoEnsureLocal({
             repo: sshRepo,
-            clone_root: cloneRoot,
             update_mode: "fetch-only",
             auth_mode: "ssh",
             allow_ssh: true,
@@ -192,6 +192,12 @@ async function main(): Promise<void> {
       )
     );
   } finally {
+    if (previousCloneRoot) {
+      process.env.OPENCODE_REPO_CLONE_ROOT = previousCloneRoot;
+    } else {
+      process.env.OPENCODE_REPO_CLONE_ROOT = undefined;
+    }
+
     if (createdTempRoot && !keep) {
       await rm(cloneRoot, { recursive: true, force: true });
     }
