@@ -129,6 +129,20 @@ gh auth setup-git
   - `permission.external_directory["~/.opencode/repos/**"] = "allow"`
 - This lets OpenCode built-in tools access cloned repos under `~/.opencode/repos` without repeated approval prompts.
 - Recommended for users of this plugin: add the same permission rule to your own global or project OpenCode config.
+- If you already have other `permission.external_directory` rules, add `~/.opencode/repos/**` to that same object after broader patterns you want it to override, because the last matching rule wins.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "*": "ask",
+      "~/projects/personal/**": "allow",
+      "~/.opencode/repos/**": "allow"
+    }
+  }
+}
+```
 
 ## Local OpenCode smoke test
 
